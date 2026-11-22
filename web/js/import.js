@@ -11,7 +11,7 @@ export function bulkImport({ root, params }) {
   if (!db.isAdmin()) { location.hash = '#/create'; return; }
   let unsub = null;
   const jobId = params.get('job') || sessionStorage.getItem(KEY);
-  if (jobId) { watch(jobId); } else paste();
+  if (jobId) { watch(jobId); } else paste(sessionStorage.getItem(KEY + '-rest') || '');
 
   function paste(prefill = '') {
     root.innerHTML = String(html`<main class="screen">
@@ -26,13 +26,17 @@ export function bulkImport({ root, params }) {
     </main>`);
     const ta = $('#links', root);
     const urls = () => [...new Set((ta.value.match(/https?:\/\/[^\s,]+/g) || []))];
-    const upd = () => { const n = urls().length; $('#count', root).textContent = n > MAX ? `${n} links. Only the first ${MAX} will be looked up.` : `${n} ${n === 1 ? 'link' : 'links'}`; };
+    const upd = () => { const n = urls().length; $('#count', root).textContent = n > MAX ? `${n} links. The first ${MAX} are looked up now; the rest stay here for the next round.` : `${n} ${n === 1 ? 'link' : 'links'}`; };
     ta.oninput = upd; upd();
     $('#go', root).onclick = async () => {
       const list = urls();
       if (!list.length) { $('#err', root).textContent = 'Paste at least one link that starts with https://'; return; }
       $('#go', root).disabled = true;
-      try { const id = await db.createLookupJob(list.slice(0, MAX)); sessionStorage.setItem(KEY, id); watch(id); }
+      try {
+        const id = await db.createLookupJob(list.slice(0, MAX)); sessionStorage.setItem(KEY, id);
+        sessionStorage.setItem(KEY + '-rest', list.slice(MAX).join('\n')); // the rest wait for the next round
+        watch(id);
+      }
       catch (e) { $('#err', root).textContent = db.friendlyError(e); $('#go', root).disabled = false; }
     };
   }
@@ -109,7 +113,9 @@ export function bulkImport({ root, params }) {
         }
         forget(id);
         toast(`${chosen.length} ${chosen.length === 1 ? 'clip is' : 'clips are'} being made. They show up on Home as they finish.`, 5000);
-        location.hash = '#/jobs';
+        const rest = sessionStorage.getItem(KEY + '-rest');
+        if (rest) { toast(`Queued. ${rest.split('\n').length} more links are waiting in the box for the next round.`, 5000); paste(rest); }
+        else location.hash = '#/jobs';
       } catch (e) { $('#err', root).textContent = db.friendlyError(e); btn.disabled = false; btn.textContent = 'Try again'; }
     }
     draw();
