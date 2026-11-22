@@ -10,11 +10,11 @@ export function card(c, big = false) {
   const vl = c.scope === 'vlipsy';
   return html`<a class="card" href="${vl ? `#/vlip/${encodeURIComponent(c.vid)}` : `#/clip/${c.id}`}">
     <div class="thumb" style="background:${raw(tileFor(c.id))}">
-      ${c.thumbUrl ? html`<img src="${c.thumbUrl}" alt="" loading="lazy" decoding="async" onerror="this.remove()"><span class="shade"></span>` : ''}
+      ${c.thumbUrl ? html`<img src="${c.thumbUrl}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
       ${c.scope === 'personal' ? html`<span class="badge">Only you</span>` : vl ? html`<span class="badge">Vlipsy</span>` : ''}
       <span class="dur">${fmtDur(c.duration)}</span>
-      <span class="ttl">${c.title}</span>
     </div>
+    <span class="ttl">${c.title}</span>
     <div class="meta"><span>${vl ? (c.from ? `from ${c.from}` : 'from Vlipsy') : `by ${c.uploaderName}`}</span>${big && !vl ? html`<span>${c.shares} ${c.shares === 1 ? 'share' : 'shares'}</span>` : ''}</div>
   </a>`;
 }

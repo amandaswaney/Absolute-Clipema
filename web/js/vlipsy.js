@@ -25,7 +25,7 @@ export function norm(v) {
   const thumb = m.preview_small || m.preview_fixed_width || m.preview || {};
   return {
     id: 'vl:' + v.id, vid: v.id, scope: 'vlipsy', title: v.title || 'Untitled', tags: v.tags || [], from: v.from || '',
-    duration: v.duration || 0, videoUrl: mp4.url || null, width: mp4.width || 0, height: mp4.height || 0,
+    duration: Number(v.duration) || 0, videoUrl: mp4.url || null, smallUrl: (m.mp4_small && m.mp4_small.url) || null, width: mp4.width || 0, height: mp4.height || 0,
     thumbUrl: thumb.url || null, pageUrl: v.url || null, shortUrl: v.short_url || null,
     uploaderName: 'Vlipsy', category: 'Vlipsy', createdAt: 0, views: 0, favCount: 0, shares: 0,
   };
@@ -56,7 +56,7 @@ export function vlip({ root, match }) {
   const vid = match[1];
   let c = db.state.vlips.get('vl:' + vid) || null, blob = null, blobP = null, gone = false;
   const getBlob = () => {
-    if (!blobP) blobP = fetch(c.videoUrl, { mode: 'cors' }).then((r) => { if (!r.ok) throw new Error(); return r.blob(); }).then((b) => (blob = b)).catch((e) => { blobP = null; throw e; });
+    if (!blobP) blobP = fetch(c.videoUrl, { mode: 'cors', referrerPolicy: 'no-referrer' }).then((r) => { if (!r.ok) throw new Error(); return r.blob(); }).then((b) => (blob = b)).catch((e) => { blobP = null; throw e; });
     return blobP;
   };
   const draw = () => {
@@ -66,7 +66,7 @@ export function vlip({ root, match }) {
     root.innerHTML = String(html`<main class="screen">
       <div class="top-row">${backBtn('#/search?src=vlipsy')}<span class="grow"></span><span class="pill">From Vlipsy</span></div>
       <div class="player ${tall ? 'tall' : ''}">
-        <video id="v" src="${c.videoUrl}" ${c.thumbUrl ? html`poster="${c.thumbUrl}"` : ''} controls playsinline loop preload="auto"></video>
+        <video id="v" src="${c.videoUrl}" ${c.thumbUrl ? html`poster="${c.thumbUrl}"` : ''} referrerpolicy="no-referrer" controls playsinline loop preload="auto"></video>
       </div>
       <div class="stack tight">
         <h1 style="font-size:30px;overflow-wrap:anywhere">${c.title}</h1>
@@ -82,6 +82,12 @@ export function vlip({ root, match }) {
     </main>`);
     const v = $('#v', root);
     v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
+    // If the main file will not play, try Vlipsy's smaller copy, then say so plainly.
+    v.onerror = () => {
+      if (c.smallUrl && v.src !== c.smallUrl) { v.src = c.smallUrl; v.play().catch(() => {}); return; }
+      const p = $('.player', root); if (!p) return;
+      p.insertAdjacentHTML('afterend', String(html`<p class="err" role="alert">This Vlipsy video would not play here. ${c.pageUrl ? html`<a href="${c.pageUrl}" target="_blank" rel="noopener noreferrer">Open it on Vlipsy</a>` : ''}</p>`));
+    };
     $('#share', root).onclick = share;
     $('#dl', root).onclick = download;
     $('#fav', root).onclick = async () => {
