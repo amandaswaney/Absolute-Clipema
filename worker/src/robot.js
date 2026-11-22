@@ -50,6 +50,12 @@ function initFirebase() {
   return projectId;
 }
 
+if (args.has('--peek') && !process.env.FIREBASE_SERVICE_ACCOUNT && !process.env.FIREBASE_SERVICE_ACCOUNT_FILE && !process.env.FIRESTORE_EMULATOR_HOST) {
+  // Not set up yet: stay quiet instead of failing (and emailing) every 10 minutes.
+  console.log('The robot is not set up yet (no FIREBASE_SERVICE_ACCOUNT secret). See docs/SETUP.md.');
+  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'work=false\n');
+  process.exit(0);
+}
 const projectId = initFirebase();
 const db = getFirestore();
 const auth = getAuth();
