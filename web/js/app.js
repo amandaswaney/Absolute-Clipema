@@ -5,6 +5,7 @@ import * as views from './views.js';
 import * as create from './create.js';
 import * as admin from './admin.js';
 import { bulkImport } from './import.js';
+import * as vlipsy from './vlipsy.js';
 
 const root = document.getElementById('app');
 let cleanup = null;
@@ -13,6 +14,7 @@ const ROUTES = [
   [/^\/home$/, views.home, 'home'],
   [/^\/search$/, views.search, 'search'],
   [/^\/clip\/([\w-]+)$/, views.clip, ''],
+  [/^\/vlip\/([\w-]+)$/, vlipsy.vlip, 'search'],
   [/^\/library$/, views.library, 'library'],
   [/^\/library\/(favs|mine)$/, views.libraryList, 'library'],
   [/^\/folder\/([\w-]+)$/, views.folder, 'library'],

@@ -187,6 +187,8 @@ form.stack, .stack { display: flex; flex-direction: column; gap: 20px; }
 .seg { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 4px; padding: 4px; background: var(--surf); border: 1px solid var(--line); border-radius: 14px; }
 .seg button { height: 40px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-weight: 600; font-size: 15px; padding: 0 6px; }
 .seg button[aria-selected="true"], .seg button[aria-checked="true"] { background: var(--raised); color: var(--tab-on); }
+.seg > a { display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: 15px; text-decoration: none; }
+.seg > a[aria-current="page"] { background: var(--raised); color: var(--tab-on); }
 
 /* Bottom nav */
 .nav {

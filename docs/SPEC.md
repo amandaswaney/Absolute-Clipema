@@ -14,6 +14,7 @@ A private, non-commercial clip and meme app for Aman and 5 to 15 friends. Same i
 - **Find clips.** Search by name, tag, category or uploader. Home shows Trending this week and New from the group, with category chips.
 - **Use clips.** Play, download, or share the actual video file to WhatsApp, Instagram, iMessage and others through the phone's share sheet.
 - **Your stuff.** Favourites, your uploads, and your own folders.
+- **Vlipsy tab.** Search has an "Our clips | Vlipsy" switch, and Home shows Trending on Vlipsy. These come live from Vlipsy's official API (docs.vlipsy.com) and play from Vlipsy's servers, so they use none of our storage. Vlipsy clips can be shared, saved, loved and put in folders like our own. Until Aman pastes his own key (Admin, Robot tab), the app uses the public test key from Vlipsy's docs.
 - **Deleting.** The person who uploaded a clip, and Aman, can delete it.
 - **Admin (Aman only).** Create and cancel invite codes, see members, reset a member's password, remove a member, and check the clip robot's health.
 - **Seven colour themes on every screen**, chosen per person under App colours: Pimpin Purple (default), Emerald Green, Sapphire Blue, Ruby Red, Midnight Black, Ivory White and Panda, each with its neon accent.

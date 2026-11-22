@@ -13,6 +13,7 @@ export const state = {
   clips: new Map(),  // id -> clip
   folders: [],
   media: null,
+  vlips: new Map(),
   ready: false,
 };
 const subs = { clips: new Set(), profile: new Set(), folders: new Set() };
@@ -178,6 +179,10 @@ async function syncCollection(coll, scope) {
 }
 
 export async function startSync(uid) {
+  unsubs.push(fb.onSnapshot(fb.collection(fs, 'users', uid, 'vlips'), (snap) => {
+    state.vlips = new Map(snap.docs.map((d) => { const x = d.data(); return ['vl:' + d.id, { ...x, id: 'vl:' + d.id, vid: d.id, scope: 'vlipsy', uploaderName: 'Vlipsy', category: 'Vlipsy', createdAt: 0 }]; }));
+    emit('clips');
+  }, () => {}));
   unsubs.push(fb.onSnapshot(fb.doc(fs, 'config', 'media'), (s) => { state.media = s.exists() ? s.data() : null; emit('clips'); }, () => {}));
   const a = syncCollection(fb.collection(fs, 'clips'), 'group');
   const b = syncCollection(fb.collection(fs, 'users', uid, 'clips'), 'personal');
@@ -207,6 +212,12 @@ export const isFav = (id) => !!(state.profile && (state.profile.favs || []).incl
 export async function toggleFav(c) {
   const fav = isFav(c.id);
   const b = fb.writeBatch(fs);
+  if (c.scope === 'vlipsy') { // Vlipsy clips: keep a small copy of the details so Library can show them
+    b.update(fb.doc(fs, 'users', state.user.uid), { favs: fav ? fb.arrayRemove(c.id) : fb.arrayUnion(c.id) });
+    if (!fav) b.set(fb.doc(fs, 'users', state.user.uid, 'vlips', c.vid), vlipSnapshot(c));
+    await b.commit();
+    return !fav;
+  }
   b.update(fb.doc(fs, 'users', state.user.uid), { favs: fav ? fb.arrayRemove(c.id) : fb.arrayUnion(c.id) });
   b.update(clipRef(c), { favCount: fb.increment(fav ? -1 : 1), updatedAt: fb.serverTimestamp() });
   await b.commit();
@@ -225,6 +236,16 @@ export async function deleteClip(c) {
 export async function editClip(c, { title, tags, category }) {
   await fb.updateDoc(clipRef(c), { title, titleLower: title.toLowerCase(), tags, category, updatedAt: fb.serverTimestamp() });
 }
+
+// ---------- Vlipsy clips saved by reference ----------
+const vlipSnapshot = (c) => ({ vid: c.vid, title: c.title, tags: c.tags || [], from: c.from || '', duration: c.duration || 0,
+  thumbUrl: c.thumbUrl || null, videoUrl: c.videoUrl || null, width: c.width || 0, height: c.height || 0, savedAt: fb.serverTimestamp() });
+export async function saveVlip(c) { await fb.setDoc(fb.doc(fs, 'users', state.user.uid, 'vlips', c.vid), vlipSnapshot(c)); }
+export const getAny = (id) => state.clips.get(id) || state.vlips.get(id) || null;
+export async function getVlipsyKey() {
+  try { const s = await fb.getDoc(fb.doc(fs, 'config', 'vlipsy')); return s.exists() ? s.data().key || '' : ''; } catch { return ''; }
+}
+export async function saveVlipsyKey(key) { await fb.setDoc(fb.doc(fs, 'config', 'vlipsy'), { key: key.trim(), updatedAt: fb.serverTimestamp() }); }
 
 // ---------- Folders ----------
 export async function createFolder(name) {

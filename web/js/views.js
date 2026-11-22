@@ -1,19 +1,21 @@
 import * as db from './db.js';
 import { html, raw, icon, $, $$, toast, sheet, confirmSheet, fmtDur, ago, backBtn, copyText, esc } from './ui.js';
 import { THEMES, CATEGORIES, applyTheme } from './themes.js';
+import * as vlipsy from './vlipsy.js';
 
 const TILES = ['var(--t1)', 'var(--t2)', 'var(--t3)', 'var(--t4)'];
 const tileFor = (id) => TILES[[...id].reduce((s, ch) => s + ch.charCodeAt(0), 0) % 4];
 
 export function card(c, big = false) {
-  return html`<a class="card" href="#/clip/${c.id}">
+  const vl = c.scope === 'vlipsy';
+  return html`<a class="card" href="${vl ? `#/vlip/${encodeURIComponent(c.vid)}` : `#/clip/${c.id}`}">
     <div class="thumb" style="background:${raw(tileFor(c.id))}">
       ${c.thumbUrl ? html`<img src="${c.thumbUrl}" alt="" loading="lazy" decoding="async" onerror="this.remove()"><span class="shade"></span>` : ''}
-      ${c.scope === 'personal' ? html`<span class="badge">Only you</span>` : ''}
+      ${c.scope === 'personal' ? html`<span class="badge">Only you</span>` : vl ? html`<span class="badge">Vlipsy</span>` : ''}
       <span class="dur">${fmtDur(c.duration)}</span>
       <span class="ttl">${c.title}</span>
     </div>
-    <div class="meta"><span>by ${c.uploaderName}</span>${big ? html`<span>${c.shares} ${c.shares === 1 ? 'share' : 'shares'}</span>` : ''}</div>
+    <div class="meta"><span>${vl ? (c.from ? `from ${c.from}` : 'from Vlipsy') : `by ${c.uploaderName}`}</span>${big && !vl ? html`<span>${c.shares} ${c.shares === 1 ? 'share' : 'shares'}</span>` : ''}</div>
   </a>`;
 }
 const skeletons = (n, h = 104) => raw(Array.from({ length: n }, () => `<div class="card" aria-hidden="true"><div class="thumb skeleton" style="height:${h}px"></div><div class="skeleton" style="height:12px;width:60%;border-radius:6px"></div></div>`).join(''));
@@ -68,11 +70,23 @@ export function home({ root }) {
           <div class="sec-head"><h2>New from the group</h2><a href="#/search">See all</a></div>
           <div class="grid">${fresh.map((c) => card(c))}</div>
         </section>`}
+      ${cat === 'All' ? html`<section class="stack tight" id="vlrail"></section>` : ''}
     </main>`);
     $$('[data-cat]', root).forEach((b) => b.onclick = () => { cat = b.dataset.cat; draw(); });
+    drawVl();
   };
+  // Trending on Vlipsy, fetched live from their API. Fills in quietly; hides itself if Vlipsy is down.
+  let vl = null, gone = false;
+  const drawVl = () => {
+    const el = $('#vlrail', root); if (!el) return;
+    if (vl === 'fail' || (vl && !vl.length)) { el.hidden = true; return; }
+    el.innerHTML = String(html`<div class="sec-head"><h2>Trending on Vlipsy</h2><a href="#/search?src=vlipsy">See more</a></div>
+      <div class="rail">${vl ? vl.map((c) => card(c, true)) : skeletons(2, 146)}</div>`);
+  };
+  vlipsy.trending(12).then((r) => { vl = r.items; }, () => { vl = 'fail'; }).then(() => { if (!gone) drawVl(); });
   draw();
-  return db.on('clips', draw);
+  const off = db.on('clips', draw);
+  return () => { gone = true; off(); };
 }
 
 // ---------- Search ----------
@@ -91,10 +105,12 @@ function rank(c, q) {
 }
 
 export function search({ root, params }) {
+  if (params.get('src') === 'vlipsy') return searchVlipsy({ root, params });
   let q = params.get('q') || '';
   let cat = params.get('cat') || 'All';
   root.innerHTML = String(html`<main class="screen">
     <h1>Search</h1>
+    ${srcTabs('ours')}
     <form class="search" role="search" id="sf">${icon('search')}
       <label class="sr" for="q">Search clips</label>
       <input id="q" type="search" value="${q}" placeholder="Search clips, tags, people" autocomplete="off" enterkeyhint="search">
@@ -104,12 +120,14 @@ export function search({ root, params }) {
   </main>`);
   const input = $('#q', root);
   $('#sf', root).onsubmit = (e) => { e.preventDefault(); input.blur(); };
+  $('#to-vl', root).onclick = (e) => { e.preventDefault(); const v = input.value.trim(); location.hash = '#/search?src=vlipsy' + (v ? '&q=' + encodeURIComponent(v) : ''); };
   const drawChips = () => {
     $('#chips', root).innerHTML = String(html`${['All', ...CATEGORIES].map((k) => html`<button class="chip" aria-pressed="${k === cat}" data-cat="${k}">${k}</button>`)}`);
     $$('[data-cat]', root).forEach((b) => b.onclick = () => { cat = b.dataset.cat; drawChips(); drawResults(); syncUrl(); });
   };
   const syncUrl = () => {
     const p = new URLSearchParams(); if (q) p.set('q', q); if (cat !== 'All') p.set('cat', cat);
+    $('#to-vl', root).href = '#/search?src=vlipsy' + (q ? '&q=' + encodeURIComponent(q) : '');
     history.replaceState(null, '', '#/search' + (p.toString() ? '?' + p : ''));
   };
   const drawResults = () => {
@@ -140,6 +158,68 @@ export function search({ root, params }) {
   if (!q) setTimeout(() => input.focus(), 50);
   return db.on('clips', drawResults);
 }
+function srcTabs(active) {
+  return html`<nav class="seg" aria-label="Where to search">
+    <a href="#/search" id="to-ours" aria-current="${active === 'ours' ? 'page' : 'false'}">Our clips</a>
+    <a href="#/search?src=vlipsy" id="to-vl" aria-current="${active === 'vlipsy' ? 'page' : 'false'}">Vlipsy</a></nav>`;
+}
+
+// Live search of Vlipsy's library through their API.
+function searchVlipsy({ root, params }) {
+  let q = params.get('q') || '', items = [], total = 0, busy = false, err = '', ticket = 0, gone = false;
+  root.innerHTML = String(html`<main class="screen">
+    <h1>Search</h1>
+    ${srcTabs('vlipsy')}
+    <form class="search" role="search" id="sf">${icon('search')}
+      <label class="sr" for="q">Search Vlipsy</label>
+      <input id="q" type="search" value="${q}" placeholder="Search Vlipsy clips" autocomplete="off" enterkeyhint="search">
+    </form>
+    <div id="results"></div>
+  </main>`);
+  const input = $('#q', root), out = $('#results', root);
+  $('#sf', root).onsubmit = (e) => { e.preventDefault(); input.blur(); clearTimeout(t); run(input.value); };
+  $('#to-ours', root).onclick = (e) => { e.preventDefault(); const v = input.value.trim(); location.hash = '#/search' + (v ? '?q=' + encodeURIComponent(v) : ''); };
+  const draw = () => {
+    if (err && !items.length) {
+      out.innerHTML = String(html`<div class="empty"><div class="glyph">${icon('alert')}</div><h2>Vlipsy did not answer</h2><p>${err}</p><button class="btn small" id="retry">Try again</button></div>`);
+      $('#retry', out).onclick = () => run(q); return;
+    }
+    if (busy && !items.length) { out.innerHTML = String(html`<div class="grid">${skeletons(6)}</div>`); return; }
+    if (!items.length) {
+      out.innerHTML = String(html`<div class="empty"><div class="glyph">${icon('search')}</div><h2>No Vlipsy clips match “${q}”</h2><p>Try fewer or different words.</p></div>`); return;
+    }
+    out.innerHTML = String(html`<p class="muted small" style="margin:0 0 10px">${q ? `Vlipsy clips for “${q}”` : 'Trending on Vlipsy'}</p>
+      <div class="grid">${items.map((c) => card(c))}</div>
+      ${items.length < total ? html`<button class="btn ghost" id="more" style="margin-top:16px" ${busy ? html`disabled` : ''}>${busy ? 'Loading…' : 'Show more'}</button>` : ''}
+      ${err ? html`<p class="err" role="alert">${err}</p>` : ''}`);
+    const m = $('#more', out); if (m) m.onclick = more;
+  };
+  async function run(text) {
+    q = text.trim(); items = []; total = 0; err = ''; busy = true;
+    history.replaceState(null, '', '#/search?src=vlipsy' + (q ? '&q=' + encodeURIComponent(q) : ''));
+    const my = ++ticket; draw();
+    try { const r = await vlipsy.search(q, 30, 0); if (my !== ticket || gone) return; items = r.items; total = r.total; }
+    catch (e) { if (my !== ticket || gone) return; err = e.message; }
+    busy = false; draw();
+  }
+  async function more() {
+    if (busy) return; busy = true; err = ''; draw();
+    const my = ticket;
+    try {
+      const r = await vlipsy.search(q, 30, items.length); if (my !== ticket || gone) return;
+      const seen = new Set(items.map((c) => c.id));
+      const add = r.items.filter((c) => !seen.has(c.id));
+      items = items.concat(add); total = add.length ? r.total : items.length;
+    } catch (e) { if (my !== ticket || gone) return; err = e.message; }
+    busy = false; draw();
+  }
+  let t;
+  input.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => run(input.value), 400); });
+  run(q);
+  if (!q) setTimeout(() => input.focus(), 50);
+  return () => { gone = true; clearTimeout(t); };
+}
+
 function topTags() {
   const n = new Map();
   allClips().forEach((c) => (c.tags || []).forEach((t) => n.set(t, (n.get(t) || 0) + 1)));
@@ -325,7 +405,7 @@ function manageSheet(c) {
 // ---------- Library ----------
 export function library({ root }) {
   const draw = () => {
-    const favs = (db.state.profile.favs || []).filter((id) => db.state.clips.has(id));
+    const favs = (db.state.profile.favs || []).filter((id) => db.getAny(id));
     const mine = allClips().filter((c) => c.uploaderUid === db.state.user.uid);
     const fs = db.state.folders;
     root.innerHTML = String(html`<main class="screen">
@@ -347,7 +427,7 @@ export function library({ root }) {
   const a = db.on('clips', draw), b = db.on('folders', draw), c = db.on('profile', draw);
   return () => { a(); b(); c(); };
 }
-const countIn = (f) => f.clipIds.filter((id) => db.state.clips.has(id)).length;
+const countIn = (f) => f.clipIds.filter((id) => db.getAny(id)).length;
 
 function newFolderSheet(onDone) {
   sheet('New folder', html`<form class="stack" id="f"><div class="field"><label for="fn">Folder name</label><input class="input" id="fn" maxlength="40" autocomplete="off" required></div>
@@ -366,7 +446,7 @@ export function libraryList({ root, match }) {
   const kind = match[1];
   const draw = () => {
     const list = kind === 'favs'
-      ? (db.state.profile.favs || []).map((id) => db.state.clips.get(id)).filter(Boolean).reverse()
+      ? (db.state.profile.favs || []).map((id) => db.getAny(id)).filter(Boolean).reverse()
       : newest(allClips().filter((c) => c.uploaderUid === db.state.user.uid));
     root.innerHTML = String(html`<main class="screen">
       <div class="top-row">${backBtn('#/library')}<h1 class="grow" style="font-size:28px">${kind === 'favs' ? 'Favourites' : 'My uploads'}</h1></div>
@@ -391,7 +471,7 @@ export function folder({ root, match }) {
         <div class="empty"><div class="glyph">${icon('folder')}</div><h2>Folder not found</h2><p>It may have been deleted.</p><a class="btn small" href="#/library">Back to Library</a></div></main>`);
       return;
     }
-    const list = f.clipIds.map((cid) => db.state.clips.get(cid)).filter(Boolean).reverse();
+    const list = f.clipIds.map((cid) => db.getAny(cid)).filter(Boolean).reverse();
     root.innerHTML = String(html`<main class="screen">
       <div class="top-row">${backBtn('#/library')}<h1 class="grow" style="font-size:28px;overflow-wrap:anywhere">${f.name}</h1>
         <button class="sq-btn" id="ren" aria-label="Rename folder" title="Rename folder">${icon('edit')}</button>

@@ -73,6 +73,11 @@ service cloud.firestore {
           && request.resource.data.clipIds is list && request.resource.data.clipIds.size() <= 1000;
       }
 
+      // Vlipsy clips this person loved or put in a folder (a small copy of the details).
+      match /vlips/{vid} {
+        allow read, write: if isMember() && request.auth.uid == uid;
+      }
+
       // Personal clips: only the owner sees them. The robot creates them.
       match /clips/{clipId} {
         allow read: if isMember() && request.auth.uid == uid;
@@ -142,7 +147,7 @@ service cloud.firestore {
 
     match /config/{docId} {
       allow read: if isMember();
-      allow write: if isAdmin() && docId == 'trigger';
+      allow write: if isAdmin() && docId in ['trigger', 'vlipsy'];
     }
   }
 }

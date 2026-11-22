@@ -1,4 +1,5 @@
 import * as db from './db.js';
+import { resetKey as resetVlipsyKey } from './vlipsy.js';
 import { html, icon, $, $$, toast, sheet, confirmSheet, backBtn, copyText, when, ago } from './ui.js';
 
 function tempPassword() {
@@ -117,7 +118,7 @@ async function members(body, redraw) {
 }
 
 async function robot(body) {
-  const [st, trig] = await Promise.all([db.getStatus(), db.getTrigger()]);
+  const [st, trig, vkey] = await Promise.all([db.getStatus(), db.getTrigger(), db.getVlipsyKey()]);
   const ms = (t) => (t && t.toMillis ? t.toMillis() : 0);
   const lastRun = ms(st && st.lastRun);
   const weekly = st && st.weekly;
@@ -143,12 +144,26 @@ async function robot(body) {
       <p class="err" id="terr"></p>
       <div class="btn-row"><button class="btn ghost small" type="button" id="test" ${trig.token ? '' : 'disabled'}>Test it</button><button class="btn small" type="submit">Save key</button></div>
     </form>
+    <form class="panel" id="vf">
+      <h3>Vlipsy key</h3>
+      <p class="muted small" style="margin:0">${vkey ? 'Your own Vlipsy key is saved and the Vlipsy tab uses it.' : 'The Vlipsy tab is using the public test key from Vlipsy\'s docs, which may stop working. Email api@vlipsy.com to ask for your own key, then paste it here.'}</p>
+      <div class="field"><label for="vkey">Vlipsy API key</label>
+        <input class="input" id="vkey" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="${vkey ? 'A key is saved. Paste a new one to replace it.' : 'vl_…'}"></div>
+      <p class="err" id="verr"></p>
+      <button class="btn small" type="submit">Save Vlipsy key</button>
+    </form>
   </div>`);
   $('#tf', body).onsubmit = async (e) => {
     e.preventDefault();
     const v = $('#tok', body).value.trim();
     if (!v) { $('#terr', body).textContent = 'Paste the key first.'; return; }
     try { await db.saveTrigger(v); toast('Key saved'); robot(body); } catch (err) { $('#terr', body).textContent = db.friendlyError(err); }
+  };
+  $('#vf', body).onsubmit = async (e) => {
+    e.preventDefault();
+    const v = $('#vkey', body).value.trim();
+    if (!/^[\w-]{6,80}$/.test(v)) { $('#verr', body).textContent = 'Paste the key Vlipsy sent you. It usually starts with vl_.'; return; }
+    try { await db.saveVlipsyKey(v); resetVlipsyKey(); toast('Vlipsy key saved'); robot(body); } catch (err) { $('#verr', body).textContent = db.friendlyError(err); }
   };
   $('#test', body).onclick = async () => {
     const ok = await db.testTrigger();
