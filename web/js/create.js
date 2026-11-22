@@ -387,7 +387,8 @@ export function details({ root }) {
 
 // ---------- Step 4: progress ----------
 const STAGES = [
-  ['queued', 'Request saved'],
+  ['saved', 'Request saved'],
+  ['queued', 'Waiting for the robot to start'],
   ['working', 'Robot is grabbing and cutting'],
   ['done', 'Clip ready'],
 ];
