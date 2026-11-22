@@ -42,11 +42,21 @@ function steps(n) {
     <b>${i + 1 < n ? icon('check', '', 'width:14px;height:14px;stroke-width:3') : i + 1}</b>${s}</li>`)}</ol>`;
 }
 
+// Tabs at the top of Make a clip. Bulk import is for the admin only.
+export function makeTabs(active) {
+  if (!db.isAdmin()) return '';
+  return html`<nav class="seg" aria-label="Make a clip">
+    <a href="#/create" role="tab" aria-selected="${active === 'one'}" style="display:flex;align-items:center;justify-content:center;height:40px;border-radius:10px;font-weight:600;font-size:15px;text-decoration:none;${active === 'one' ? 'background:var(--raised);color:var(--tab-on)' : 'color:var(--muted)'}">One clip</a>
+    <a href="#/import" role="tab" aria-selected="${active === 'bulk'}" style="display:flex;align-items:center;justify-content:center;height:40px;border-radius:10px;font-weight:600;font-size:15px;text-decoration:none;${active === 'bulk' ? 'background:var(--raised);color:var(--tab-on)' : 'color:var(--muted)'}">Vlipsy bulk import</a>
+  </nav>`;
+}
+
 // ---------- Step 1: source ----------
 export function source({ root, params }) {
   const incoming = params.get('url') || '';
   root.innerHTML = String(html`<main class="screen">
     <div class="top-row"><h1 class="grow">Make a clip</h1></div>
+    ${makeTabs('one')}
     <form class="panel" id="lf">
       <div class="field"><label for="url">Paste a link</label>
         <div class="top-row" style="gap:8px"><input class="input grow" id="url" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://youtube.com/watch?v=…" value="${incoming}">
@@ -59,8 +69,6 @@ export function source({ root, params }) {
     <label class="source-opt" for="file"><span class="icon-box">${icon('image')}</span>
       <span class="grow" style="display:flex;flex-direction:column;gap:2px"><b>Pick a video from your phone</b><span class="muted small">Your phone cuts it before uploading</span></span>${icon('chev', 'chev')}</label>
     <input type="file" id="file" accept="video/*" class="sr">
-    ${db.isAdmin() ? html`<a class="source-opt" href="#/import"><span class="icon-box">${icon('copy')}</span>
-      <span class="grow" style="display:flex;flex-direction:column;gap:2px"><b>Paste several links at once</b><span class="muted small">Up to 20, with names and tags filled in for you</span></span>${icon('chev', 'chev')}</a>` : ''}
     <p class="muted small" style="margin:0">Finished clips can be up to ${MAX} seconds long.</p>
   </main>`);
   const urlIn = $('#url', root), err = $('#lerr', root);

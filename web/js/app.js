@@ -55,7 +55,7 @@ async function render() {
   if (cleanup) { try { cleanup(); } catch {} cleanup = null; }
   const container = document.createElement('div');
   root.replaceChildren(container);
-  const showNav = !path.startsWith('/create/') && !path.startsWith('/job/') && path !== '/import';
+  const showNav = !path.startsWith('/create/') && !path.startsWith('/job/');
   if (showNav) root.insertAdjacentHTML('beforeend', String(nav(active)));
   try {
     cleanup = (await view({ root: container, params, match, rerender: render })) || null;

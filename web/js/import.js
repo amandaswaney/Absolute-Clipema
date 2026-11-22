@@ -2,6 +2,7 @@
 import * as db from './db.js';
 import { html, icon, $, $$, toast, backBtn } from './ui.js';
 import { CATEGORIES } from './themes.js';
+import { makeTabs } from './create.js';
 
 const KEY = 'clipema-import-job';
 const MAX = 20;
@@ -13,9 +14,10 @@ export function bulkImport({ root, params }) {
   if (jobId) { watch(jobId); } else paste();
 
   function paste(prefill = '') {
-    root.innerHTML = String(html`<main class="screen no-nav">
-      <div class="top-row">${backBtn('#/create')}<h1 class="grow" style="font-size:28px">Paste several links</h1></div>
-      <p class="muted" style="margin:0">Paste up to ${MAX} links, one per line, for example from Vlipsy or YouTube. The robot reads each page's title and tags, and you check them before anything is imported.</p>
+    root.innerHTML = String(html`<main class="screen">
+      <div class="top-row"><h1 class="grow">Make a clip</h1></div>
+      ${makeTabs('bulk')}
+      <p class="muted" style="margin:0">Paste up to ${MAX} Vlipsy links, one per line. No trimming needed: the robot reads each clip's name and tags, and you check them before anything is imported.</p>
       <div class="field"><label for="links">Links</label>
         <textarea class="input" id="links" rows="10" autocapitalize="none" spellcheck="false" placeholder="https://vlipsy.com/vlip/…">${prefill}</textarea>
         <span class="hint" id="count">0 links</span></div>
@@ -36,7 +38,7 @@ export function bulkImport({ root, params }) {
   }
 
   function watch(id) {
-    root.innerHTML = String(html`<main class="screen no-nav"><div class="top-row">${backBtn('#/create')}<h1 class="grow" style="font-size:28px">Looking them up</h1></div>
+    root.innerHTML = String(html`<main class="screen"><div class="top-row">${backBtn('#/create')}<h1 class="grow" style="font-size:28px">Looking them up</h1></div>
       <div class="progress indeterminate"><i></i></div>
       <p class="muted" style="margin:0">The robot is reading each page. This usually takes about a minute (up to 10 if the quick start key is not set up). You can leave and come back; this screen remembers where you were.</p>
       <button class="btn ghost small" id="cancel" style="align-self:flex-start">Start over</button></main>`);
@@ -59,7 +61,7 @@ export function bulkImport({ root, params }) {
     let category = 'Reactions', visibility = 'group';
     const draw = () => {
       const n = items.filter((i) => i.on).length;
-      root.innerHTML = String(html`<main class="screen no-nav">
+      root.innerHTML = String(html`<main class="screen">
         <div class="top-row">${backBtn('#/create')}<h1 class="grow" style="font-size:28px">Check and import</h1></div>
         <p class="muted" style="margin:0">Fix any names or tags, and untick anything you don't want.</p>
         <ul class="list" style="gap:12px">${items.map((it, i) => html`<li class="panel" style="gap:12px;${it.on ? '' : 'opacity:.6'}">
