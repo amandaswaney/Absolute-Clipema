@@ -185,7 +185,6 @@ export function clip({ root, match }) {
         <button class="act" id="fold">${icon('folder')}Folder</button>
       </div>
       <p class="muted small" style="margin:0">${c.views} ${c.views === 1 ? 'view' : 'views'} · ${c.favCount} ${c.favCount === 1 ? 'love' : 'loves'} · ${c.shares} ${c.shares === 1 ? 'share' : 'shares'}</p>
-      <button class="btn ghost small" id="copy" style="align-self:flex-start">${icon('link')}Copy video link</button>
     </main>`);
     const v = $('#v', root);
     v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
@@ -195,7 +194,6 @@ export function clip({ root, match }) {
       try { const now = await db.toggleFav(c); toast(now ? 'Added to favourites' : 'Removed from favourites'); } catch (e) { toast(db.friendlyError(e)); }
     };
     $('#fold', root).onclick = () => folderSheet(c);
-    $('#copy', root).onclick = () => copyText(c.videoUrl);
     const more = $('#more', root); if (more) more.onclick = () => manageSheet(c);
   };
 

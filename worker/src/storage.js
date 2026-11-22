@@ -18,8 +18,33 @@ export function makeStorage(env = process.env) {
     requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED',
   });
   const publicBase = (env.B2_PUBLIC_URL || `https://${host}/${bucket}`).replace(/\/+$/, '');
+  const keyId = env.B2_KEY_ID.trim(), appKey = env.B2_APP_KEY.trim();
   return {
     name: 'Backblaze B2',
+    // The bucket is private (public buckets need a paid card check). The app reads files with a
+    // download pass that lasts 7 days; the robot renews it every few days.
+    async downloadAuth() {
+      const basic = Buffer.from(`${keyId}:${appKey}`).toString('base64');
+      const r = await fetch('https://api.backblazeb2.com/b2api/v3/b2_authorize_account', { headers: { Authorization: `Basic ${basic}` } });
+      if (!r.ok) throw new Error(`Backblaze sign-in failed (HTTP ${r.status}). Check B2_KEY_ID and B2_APP_KEY.`);
+      const a = await r.json();
+      const st = a.apiInfo.storageApi;
+      let bucketId = ((st.allowed && st.allowed.buckets) || []).find((b) => b.name === bucket)?.id;
+      if (!bucketId) {
+        const lb = await fetch(`${st.apiUrl}/b2api/v3/b2_list_buckets`, { method: 'POST', headers: { Authorization: a.authorizationToken }, body: JSON.stringify({ accountId: a.accountId, bucketName: bucket }) });
+        const lj = await lb.json();
+        bucketId = lj.buckets && lj.buckets[0] && lj.buckets[0].bucketId;
+      }
+      if (!bucketId) throw new Error(`Could not find the bucket "${bucket}". Check B2_BUCKET, and that the key is allowed to use it.`);
+      const valid = 7 * 24 * 3600;
+      const d = await fetch(`${st.apiUrl}/b2api/v3/b2_get_download_authorization`, {
+        method: 'POST', headers: { Authorization: a.authorizationToken },
+        body: JSON.stringify({ bucketId, fileNamePrefix: 'v/', validDurationInSeconds: valid }),
+      });
+      if (!d.ok) throw new Error(`Backblaze would not make a download pass (HTTP ${d.status}). The key needs "Read and Write" access.`);
+      const dj = await d.json();
+      return { base: `${st.downloadUrl}/file/${encodeURIComponent(bucket)}/`, token: dj.authorizationToken, expiresAt: Date.now() + valid * 1000 };
+    },
     publicUrl: (key) => `${publicBase}/${key}`,
     async put(key, file, contentType) {
       await s3.send(new PutObjectCommand({
@@ -45,6 +70,7 @@ function localStorage(dir, base) {
   fs.mkdirSync(dir, { recursive: true });
   return {
     name: 'local folder',
+    async downloadAuth() { return { base: `${base}/`, token: 'local-test', expiresAt: Date.now() + 7 * 86400000 }; },
     publicUrl: (key) => `${base}/${key}`,
     async put(key, file) {
       const dest = path.join(dir, key);

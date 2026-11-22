@@ -24,7 +24,7 @@ A private, non-commercial clip and meme app for Aman and 5 to 15 friends. Same i
 |---|---|---|
 | The app itself | GitHub Pages | Free hosting straight from the GitHub repository |
 | Accounts and data | Firebase Authentication and Cloud Firestore (Spark plan) | Free sign-in and database |
-| Video and thumbnail files | Backblaze B2 | 10 GB free storage with no card |
+| Video and thumbnail files | Backblaze B2 (private bucket) | 10 GB free storage with no card |
 | The clip robot | GitHub Actions | Free computer time for public repositories. Runs yt-dlp and ffmpeg to grab only the chosen bits of a YouTube video, cut and join them, and upload the result |
 | Gallery cutting | ffmpeg.wasm in the browser | The phone cuts its own videos, so no server is needed |
 | Fallback robot | An old Android phone with Termux | Runs the exact same robot code if GitHub ever stops working for YouTube |
@@ -79,5 +79,5 @@ Security rules (in `firestore.rules`) only let signed-in members read anything, 
 
 - YouTube sometimes blocks robots on GitHub's computers. A spare Google account's cookies (stored as a GitHub secret) usually fixes it. If it ever stops working completely, the Android phone fallback runs from a home connection.
 - Free limits: 10 GB of video on Backblaze (roughly 1,000 to 2,000 short clips), 50,000 database reads a day. That is plenty for a group of 15.
-- Clip videos are stored in a public Backblaze bucket with unguessable file names. Anyone with an exact video link can watch that one video, which is what makes sharing work; nobody can browse the collection without an account.
+- Clip videos are stored in a private Backblaze bucket (a public one needs a card check). The robot makes a 7-day read pass and renews it every few days; only signed-in members can get the pass. Sharing sends the video file itself, so friends outside the group never need a link.
 - The code is in a public GitHub repository (needed for free hosting and robot time). No passwords, keys or clips are in the code.

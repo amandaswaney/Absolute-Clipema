@@ -12,6 +12,7 @@ export const state = {
   profile: null,     // users/{uid} doc
   clips: new Map(),  // id -> clip
   folders: [],
+  media: null,
   ready: false,
 };
 const subs = { clips: new Set(), profile: new Set(), folders: new Set() };
@@ -119,11 +120,20 @@ export const isAdmin = () => state.profile && state.profile.role === 'admin';
 export async function saveTheme(id) { if (state.user) await fb.updateDoc(fb.doc(fs, 'users', state.user.uid), { theme: id }); }
 
 // ---------- Clips ----------
+// Videos live in a private Backblaze bucket. The robot keeps a 7-day download pass in config/media.
+function mediaUrl(key, fallback) {
+  const m = state.media;
+  if (key && m && m.base && m.token) return `${m.base}${key.split('/').map(encodeURIComponent).join('/')}?Authorization=${encodeURIComponent(m.token)}`;
+  return fallback || null;
+}
 function normClip(snap, scope) {
   const d = snap.data({ serverTimestamps: 'estimate' });
   return {
+    videoKey: d.videoKey || null, thumbKey: d.thumbKey || null, rawVideoUrl: d.videoUrl, rawThumbUrl: d.thumbUrl,
+    get videoUrl() { return mediaUrl(this.videoKey, this.rawVideoUrl); },
+    get thumbUrl() { return mediaUrl(this.thumbKey, this.rawThumbUrl); },
     id: snap.id, scope, title: d.title || 'Untitled', tags: d.tags || [], category: d.category || 'Other',
-    uploaderUid: d.uploaderUid, uploaderName: d.uploaderName || 'someone', videoUrl: d.videoUrl, thumbUrl: d.thumbUrl,
+    uploaderUid: d.uploaderUid, uploaderName: d.uploaderName || 'someone',
     duration: d.duration || 0, width: d.width || 0, height: d.height || 0,
     views: d.views || 0, favCount: d.favCount || 0, shares: d.shares || 0,
     createdAt: d.createdAt ? d.createdAt.toMillis() : 0, updatedAt: d.updatedAt ? d.updatedAt.toMillis() : 0,
@@ -168,6 +178,7 @@ async function syncCollection(coll, scope) {
 }
 
 export async function startSync(uid) {
+  unsubs.push(fb.onSnapshot(fb.doc(fs, 'config', 'media'), (s) => { state.media = s.exists() ? s.data() : null; emit('clips'); }, () => {}));
   const a = syncCollection(fb.collection(fs, 'clips'), 'group');
   const b = syncCollection(fb.collection(fs, 'users', uid, 'clips'), 'personal');
   unsubs.push(fb.onSnapshot(fb.collection(fs, 'users', uid, 'folders'), (snap) => {

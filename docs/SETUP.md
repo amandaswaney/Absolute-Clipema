@@ -34,10 +34,10 @@ Tip: keep a notes app open. Several steps say "copy this into your notes"; you w
 
 ## Step 2. Backblaze B2 (video storage)
 
-1. Go to **https://www.backblaze.com/sign-up/cloud-storage** and make a free B2 account. Verify your email address when they ask (you need that for public files).
+1. Go to **https://www.backblaze.com/sign-up/cloud-storage** and make a free B2 account. You never need to add a card or make a purchase.
 2. Open **B2 Cloud Storage → Buckets → Create a Bucket**.
    - Bucket name: something unique, like `clipema-aman-2026`. Copy it into your notes as **B2_BUCKET**.
-   - Files in Bucket: **Public**.
+   - Files in Bucket: **Private**. (Public buckets need a $1 card check, so the app uses a private bucket. The robot hands the app a pass to read the videos, and renews it every few days by itself.)
    - Leave encryption and object lock off. Tap **Create a Bucket**.
 3. On the new bucket's card, find **Endpoint**, for example `s3.us-east-005.backblazeb2.com`. Copy it into your notes as **B2_ENDPOINT**.
 4. Still on the bucket's card, tap **CORS Rules**. Choose **Share everything in this bucket with all HTTPS origins**, and below that choose **Apply CORS rules to both S3 Compatible API and B2 Native API**. Tap **Update CORS Rules**. (This lets the app share the actual video file to WhatsApp and others.)

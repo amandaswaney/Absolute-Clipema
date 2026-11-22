@@ -76,6 +76,18 @@ async function heartbeat(extra = {}) {
   await db.doc('config/status').set({ lastRun: now(), runner, ytDlp: await media.ytDlpVersion(), ...extra }, { merge: true });
 }
 
+// ---------- Download pass for the private bucket ----------
+async function refreshPass(storage, force = false) {
+  const ref = db.doc('config/media');
+  const cur = await ref.get();
+  const exp = cur.exists && cur.data().expiresAt ? cur.data().expiresAt.toMillis() : 0;
+  if (!force && exp - Date.now() > 4 * 86400000) return false;
+  const p = await storage.downloadAuth();
+  await ref.set({ base: p.base, token: p.token, expiresAt: Timestamp.fromMillis(p.expiresAt), renewedAt: now() });
+  log('Renewed the video download pass.');
+  return true;
+}
+
 // ---------- Admin tasks ----------
 async function doAdminTasks() {
   const snap = await db.collection('adminTasks').get();
@@ -146,7 +158,7 @@ async function makeClip(job, file, info, storage, title) {
   await ref.set({
     title: t, titleLower: t.toLowerCase(), tags: job.tags || [], category: job.category || 'Other',
     uploaderUid: job.ownerUid, uploaderName: job.ownerName || 'someone',
-    videoUrl, thumbUrl, b2Keys: [videoKey, ...(thumbKey ? [thumbKey] : [])],
+    videoUrl, thumbUrl, videoKey, thumbKey, b2Keys: [videoKey, ...(thumbKey ? [thumbKey] : [])],
     duration: Math.round(info.duration * 10) / 10, width: info.width, height: info.height,
     source: { type: job.type, url: job.url || null },
     views: 0, favCount: 0, shares: 0, deleted: false,
@@ -266,6 +278,7 @@ async function doHousekeeping() {
 
 async function processAll(storage) {
   await heartbeat();
+  await refreshPass(storage).catch((e) => log('Download pass:', e.message));
   await doAdminTasks();
   await doTrash(storage);
   let n = await doJobs(storage);
@@ -308,16 +321,19 @@ async function setup(storage) {
   await step('Upload a test file to Backblaze', async () => {
     const f = path.join(os.tmpdir(), 'clipema-test.txt');
     fs.writeFileSync(f, `Absolute Clipema test ${new Date().toISOString()}\n`);
-    const url = await storage.put('test/hello.txt', f, 'text/plain');
-    let pub = 'could not check';
-    try {
-      const r = await fetch(url);
-      pub = r.ok ? 'files are public, good' : `files are NOT public (HTTP ${r.status}): set the bucket to Public in Backblaze`;
-      const cors = await fetch(url, { headers: { Origin: 'https://example.github.io' } });
-      if (!cors.headers.get('access-control-allow-origin')) pub += '; sharing the video file needs the CORS rule from step 3';
-    } catch (e) { pub = 'could not check: ' + e.message; }
-    await storage.remove('test/hello.txt');
-    return pub;
+    await storage.put('v/setup-test.txt', f, 'text/plain');
+    return 'upload worked';
+  });
+  await step('Make a download pass and read the test file back', async () => {
+    await refreshPass(storage, true);
+    const m = (await db.doc('config/media').get()).data();
+    const url = `${m.base}v/setup-test.txt?Authorization=${encodeURIComponent(m.token)}`;
+    let note;
+    const r = await fetch(url, { headers: { Origin: 'https://example.github.io' } });
+    if (!r.ok) throw new Error(`reading it back failed (HTTP ${r.status})`);
+    note = r.headers.get('access-control-allow-origin') ? 'reading works, sharing works' : 'reading works, but add the CORS rule from step 2.4 so sharing the video file works';
+    await storage.remove('v/setup-test.txt');
+    return note;
   });
   await step('yt-dlp is installed', async () => media.ytDlpVersion());
   await heartbeat({ setupResults: results });
@@ -327,6 +343,7 @@ async function setup(storage) {
 
 // ---------- Weekly check ----------
 async function weekly() {
+  try { await refreshPass(makeStorage()); } catch (e) { log('Download pass:', e.message); }
   const version = await media.ytDlpVersion();
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'clipema-weekly-'));
   const testUrl = process.env.WEEKLY_TEST_URL || 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
@@ -360,6 +377,7 @@ async function peek() {
   const daily = Date.now() - last > 86400000;
   if (daily) await db.doc('config/status').set({ lastHousekeeping: now() }, { merge: true });
   await db.doc('config/status').set({ lastRun: now(), runner }, { merge: true });
+  try { await refreshPass(makeStorage()); } catch (e) { log('Download pass:', e.message); }
   log(work ? 'There is work waiting.' : daily ? 'Nothing waiting, but it is time for the daily tidy-up.' : 'Nothing waiting.');
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `work=${work || daily}\n`);
 }
