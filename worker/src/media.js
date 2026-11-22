@@ -81,8 +81,8 @@ export async function joinPieces(pieces, outFile) {
   });
   fc += infos.map((_, i) => `[v${i}][a${i}]`).join('') + `concat=n=${n}:v=1:a=1[v][a]`;
   args.push('-filter_complex', fc, '-map', '[v]', '-map', '[a]', '-t', String(MAX_SECONDS + 0.5),
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-profile:v', 'high',
-    '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', outFile);
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '27', '-maxrate', '1800k', '-bufsize', '3600k', '-pix_fmt', 'yuv420p', '-profile:v', 'high',
+    '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', outFile);
   await run('ffmpeg', args, { timeoutMs: 15 * 60 * 1000 });
   return probe(outFile);
 }

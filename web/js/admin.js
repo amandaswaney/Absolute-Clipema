@@ -128,6 +128,7 @@ async function robot(body) {
       <ul class="list" style="gap:4px">
         <li>Last ran: <b>${lastRun ? `${when(lastRun)} (${ago(lastRun)})` : 'never'}</b></li>
         <li>Where: <b>${(st && st.runner) || 'unknown'}</b></li>
+        <li>Video storage used: <b>${st && st.storageBytes ? `${(st.storageBytes / 1e9).toFixed(2)} GB of 10 GB free` : 'not counted yet'}</b></li>
         <li>yt-dlp version: <b>${(st && st.ytDlp) || 'unknown'}</b></li>
         <li>Weekly YouTube check: <b>${weekly ? `${weekly.ok ? 'passed' : 'FAILED'} on ${when(ms(weekly.at))}` : 'not run yet'}</b></li>
       </ul>

@@ -120,6 +120,7 @@ async function doTrash(storage) {
     try {
       const c = await ref.get();
       if (c.exists) {
+        if (c.data().bytes) await db.doc('config/status').set({ storageBytes: FieldValue.increment(-c.data().bytes) }, { merge: true });
         for (const key of c.data().b2Keys || []) await storage.remove(key).catch((e) => log('Could not remove', key, e.message));
         await ref.set({ deleted: true, purged: true, videoUrl: null, thumbUrl: null, updatedAt: now() }, { merge: true });
       }
@@ -153,6 +154,8 @@ async function makeClip(job, file, info, storage, title) {
   let thumbKey = null;
   try { await media.thumbnail(file, jpg, info.duration); thumbKey = `v/${ref.id}.jpg`; } catch (e) { log('No thumbnail:', e.message); }
   const videoKey = `v/${ref.id}.mp4`;
+  const bytes = fs.statSync(file).size + (thumbKey ? fs.statSync(jpg).size : 0);
+  await db.doc('config/status').set({ storageBytes: FieldValue.increment(bytes) }, { merge: true });
   const videoUrl = await storage.put(videoKey, file, 'video/mp4');
   const thumbUrl = thumbKey ? await storage.put(thumbKey, jpg, 'image/jpeg') : null;
   const t = String(title || job.title || 'Untitled').slice(0, 60);
@@ -162,7 +165,7 @@ async function makeClip(job, file, info, storage, title) {
     videoUrl, thumbUrl, videoKey, thumbKey, b2Keys: [videoKey, ...(thumbKey ? [thumbKey] : [])],
     duration: Math.round(info.duration * 10) / 10, width: info.width, height: info.height,
     source: { type: job.type, url: job.url || null },
-    views: 0, favCount: 0, shares: 0, deleted: false,
+    views: 0, favCount: 0, shares: 0, deleted: false, bytes,
     createdAt: now(), updatedAt: now(),
   });
   return ref.id;
@@ -197,7 +200,8 @@ async function processGalleryJob(ref, job, work, storage) {
     const buf = Buffer.concat(mine.map((c) => Buffer.from(c.data)));
     const raw = path.join(work, `up${p}.mp4`), out = path.join(work, `out${p}.mp4`);
     fs.writeFileSync(raw, buf);
-    const info = await media.tidyUpload(raw, out);
+    await media.tidyUpload(raw, path.join(work, `chk${p}.mp4`)); // checks it is a real video within 60 s
+    const info = await media.joinPieces([raw], out); // re-squeeze: phones cut fast, not small
     ids.push(await makeClip(job, out, info, storage, parts[p].title || job.title));
   }
   return ids;
