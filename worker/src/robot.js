@@ -16,6 +16,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getSecurityRules } from 'firebase-admin/security-rules';
 import { makeStorage } from './storage.js';
 import * as media from './media.js';
+import { lookupPage } from './lookup.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnv(path.join(here, '..', '.env'));
@@ -235,6 +236,15 @@ async function doJobs(storage) {
       const work = fs.mkdtempSync(path.join(os.tmpdir(), 'clipema-'));
       log(`Job ${d.id}: ${job.type} "${job.title}" by ${job.ownerName}`);
       try {
+        if (job.type === 'lookup') {
+          const items = [];
+          for (const url of (job.urls || []).slice(0, 20)) {
+            try { items.push({ url, ...(await lookupPage(url)), error: null }); log('Looked up', url); }
+            catch (e) { items.push({ url, title: '', tags: [], videoUrl: null, thumbUrl: null, error: String(e.message || e).slice(0, 200) }); log('Lookup failed', url, e.message); }
+          }
+          await d.ref.update({ status: 'done', items, finishedAt: now(), updatedAt: now() });
+          continue;
+        }
         const ids = job.type === 'gallery' ? await processGalleryJob(d.ref, job, work, storage) : await processLinkJob(job, work, storage);
         await d.ref.update({ status: 'done', resultClipIds: ids, finishedAt: now(), updatedAt: now(), error: FieldValue.delete() });
         if (job.type === 'gallery') await deleteChunks(d.ref);

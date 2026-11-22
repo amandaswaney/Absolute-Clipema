@@ -110,7 +110,9 @@ service cloud.firestore {
       allow read: if isMember() && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if isMember()
         && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.type in ['youtube', 'link', 'gallery']
+        && request.resource.data.type in ['youtube', 'link', 'gallery', 'lookup']
+        && (request.resource.data.type != 'lookup' || isAdmin())
+        && (!('urls' in request.resource.data) || (request.resource.data.urls is list && request.resource.data.urls.size() <= 20))
         && request.resource.data.status == (request.resource.data.type == 'gallery' ? 'uploading' : 'queued')
         && request.resource.data.visibility in ['group', 'personal']
         && request.resource.data.title is string && request.resource.data.title.size() <= 60

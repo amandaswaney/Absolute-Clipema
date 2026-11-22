@@ -488,7 +488,7 @@ export async function jobs({ root }) {
   root.innerHTML = String(html`<main class="screen"><div class="top-row">${backBtn('#/me')}<h1 class="grow" style="font-size:28px">Clips in progress</h1></div><div id="jl"><div class="skeleton" style="height:64px;border-radius:16px"></div></div></main>`);
   const list = await db.myJobs();
   const label = { uploading: 'Uploading', queued: 'Waiting for the robot', working: 'Being made now', done: 'Done', failed: 'Did not work' };
-  $('#jl', root).innerHTML = String(list.length ? html`<ul class="list">${list.map((j) => html`<li><a class="row" href="#/job/${j.id}">
+  $('#jl', root).innerHTML = String(list.length ? html`<ul class="list">${list.map((j) => html`<li><a class="row" href="${j.type === 'lookup' ? `#/import?job=${j.id}` : `#/job/${j.id}`}">
       <span class="icon-box">${icon(j.status === 'done' ? 'check' : j.status === 'failed' ? 'alert' : 'clock')}</span>
       <span class="grow"><b>${j.title || 'Untitled'}</b><span>${label[j.status] || j.status} · ${ago(j.createdAt)}</span></span>${icon('chev', 'chev')}</a></li>`)}</ul>`
     : html`<div class="empty"><div class="glyph">${icon('clock')}</div><h2>Nothing in progress</h2><p>Clips you make show here while the robot works on them.</p><a class="btn small" href="#/create">${icon('plus')}Make a clip</a></div>`);

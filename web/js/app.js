@@ -4,6 +4,7 @@ import { applyTheme } from './themes.js';
 import * as views from './views.js';
 import * as create from './create.js';
 import * as admin from './admin.js';
+import { bulkImport } from './import.js';
 
 const root = document.getElementById('app');
 let cleanup = null;
@@ -23,6 +24,7 @@ const ROUTES = [
   [/^\/create\/details$/, create.details, 'create'],
   [/^\/job\/([\w-]+)$/, create.progress, 'create'],
   [/^\/admin$/, admin.admin, 'me'],
+  [/^\/import$/, bulkImport, 'create'],
 ];
 
 function parseHash() {
@@ -53,7 +55,7 @@ async function render() {
   if (cleanup) { try { cleanup(); } catch {} cleanup = null; }
   const container = document.createElement('div');
   root.replaceChildren(container);
-  const showNav = !path.startsWith('/create/') && !path.startsWith('/job/');
+  const showNav = !path.startsWith('/create/') && !path.startsWith('/job/') && path !== '/import';
   if (showNav) root.insertAdjacentHTML('beforeend', String(nav(active)));
   try {
     cleanup = (await view({ root: container, params, match, rerender: render })) || null;

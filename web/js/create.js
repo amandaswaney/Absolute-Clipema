@@ -59,6 +59,8 @@ export function source({ root, params }) {
     <label class="source-opt" for="file"><span class="icon-box">${icon('image')}</span>
       <span class="grow" style="display:flex;flex-direction:column;gap:2px"><b>Pick a video from your phone</b><span class="muted small">Your phone cuts it before uploading</span></span>${icon('chev', 'chev')}</label>
     <input type="file" id="file" accept="video/*" class="sr">
+    ${db.isAdmin() ? html`<a class="source-opt" href="#/import"><span class="icon-box">${icon('copy')}</span>
+      <span class="grow" style="display:flex;flex-direction:column;gap:2px"><b>Paste several links at once</b><span class="muted small">Up to 20, with names and tags filled in for you</span></span>${icon('chev', 'chev')}</a>` : ''}
     <p class="muted small" style="margin:0">Finished clips can be up to ${MAX} seconds long.</p>
   </main>`);
   const urlIn = $('#url', root), err = $('#lerr', root);
@@ -482,6 +484,7 @@ export function progress({ root, match }) {
         root.innerHTML = String(html`<main class="screen"><div class="top-row">${backBtn('#/jobs')}</div><div class="empty"><div class="glyph">${icon('clock')}</div><h2>This clip request is gone</h2><p>It may have been finished and cleaned up. Check My uploads.</p><a class="btn small" href="#/library/mine">My uploads</a></div></main>`);
         return;
       }
+      if (job.type === 'lookup') { location.hash = '#/import?job=' + job.id; return; }
       isGallery = job.type === 'gallery';
       draw(job);
     });

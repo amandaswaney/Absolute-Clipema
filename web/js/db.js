@@ -240,10 +240,22 @@ export async function deleteFolder(folderId) { await fb.deleteDoc(fb.doc(fs, 'us
 // ---------- Jobs (clips waiting for the robot) ----------
 export function newJobId() { return fb.doc(fb.collection(fs, 'jobs')).id; }
 
-export async function createLinkJob(job) {
+export async function createLinkJob(job, { poke = true } = {}) {
   const ref = fb.doc(fb.collection(fs, 'jobs'));
   await fb.setDoc(ref, {
     ...job, ownerUid: state.user.uid, ownerName: state.profile.username, status: 'queued',
+    createdAt: fb.serverTimestamp(), updatedAt: fb.serverTimestamp(),
+  });
+  if (poke) pokeRobot();
+  return ref.id;
+}
+
+// Admin bulk import: the robot reads each page's title, tags and video first, for review.
+export async function createLookupJob(urls) {
+  const ref = fb.doc(fb.collection(fs, 'jobs'));
+  await fb.setDoc(ref, {
+    type: 'lookup', urls: urls.slice(0, 20), title: 'Looking up links', visibility: 'group', ranges: [],
+    ownerUid: state.user.uid, ownerName: state.profile.username, status: 'queued',
     createdAt: fb.serverTimestamp(), updatedAt: fb.serverTimestamp(),
   });
   pokeRobot();

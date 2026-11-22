@@ -2,7 +2,7 @@
 const BUILD = 'dev';
 const CACHE = 'clipema-' + BUILD;
 const SHELL = ['./', 'index.html', 'css/app.css', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.jpg',
-  'js/app.js', 'js/db.js', 'js/ui.js', 'js/views.js', 'js/create.js', 'js/admin.js', 'js/clipper.js', 'js/themes.js', 'vendor/firebase.js'];
+  'js/app.js', 'js/db.js', 'js/ui.js', 'js/views.js', 'js/create.js', 'js/admin.js', 'js/import.js', 'js/clipper.js', 'js/themes.js', 'vendor/firebase.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
