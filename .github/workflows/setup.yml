@@ -1,0 +1,35 @@
+name: One-time setup
+
+# Run this once after adding the secrets (setup guide, step 7). Safe to run again at any time.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      ADMIN_SETUP_CODE: ${{ secrets.ADMIN_SETUP_CODE }}
+      B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+      B2_APP_KEY: ${{ secrets.B2_APP_KEY }}
+      B2_BUCKET: ${{ secrets.B2_BUCKET }}
+      B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+      B2_PUBLIC_URL: ${{ secrets.B2_PUBLIC_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Install
+        run: |
+          cd worker && npm ci --no-audit --no-fund
+          python3 -m pip install --quiet --upgrade --pre "yt-dlp[default]"
+      - name: Set everything up
+        working-directory: worker
+        run: node src/robot.js --setup

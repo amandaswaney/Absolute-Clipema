@@ -1,0 +1,50 @@
+name: Weekly check
+
+# Every Monday: test that the newest yt-dlp can still grab from YouTube, and record the result.
+# Recording it also keeps GitHub from switching off the scheduled robot after 60 quiet days.
+# If the test fails, this run fails and GitHub emails you.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Install ffmpeg and the newest yt-dlp
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          python3 -m pip install --quiet --upgrade --pre "yt-dlp[default]"
+          cd worker && npm ci --no-audit --no-fund
+      - name: Test a YouTube grab
+        id: test
+        working-directory: worker
+        continue-on-error: true
+        run: node src/robot.js --weekly
+      - name: Record the result
+        run: |
+          git config user.name "clip-robot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add status/weekly-check.json
+          git commit -m "Weekly check $(date -u +%Y-%m-%d)" || echo "Nothing to record"
+          git push
+      - name: Report
+        if: steps.test.outcome == 'failure'
+        run: |
+          echo "::error::The weekly YouTube test failed. See 'If YouTube clips stop working' in docs/SETUP.md."
+          exit 1

@@ -1,0 +1,146 @@
+rules_version = '2';
+
+// Absolute Clipema security rules.
+// Only members who joined with an invite can read anything. People can only change their own things.
+// The clip robot uses a service account, which skips these rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function userDoc(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function me() { return get(userDoc(request.auth.uid)).data; }
+    function isMember() { return signedIn() && exists(userDoc(request.auth.uid)) && me().removed != true; }
+    function isAdmin() { return isMember() && me().role == 'admin'; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function stepOk(field, lo, hi) {
+      return request.resource.data.get(field, 0) >= resource.data.get(field, 0) + lo
+          && request.resource.data.get(field, 0) <= resource.data.get(field, 0) + hi;
+    }
+    function inviteDoc(code) { return /databases/$(database)/documents/invites/$(code); }
+
+    // One-time invite codes. Anyone may check a code they already know.
+    match /invites/{code} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['role', 'note', 'createdBy', 'createdAt', 'usedBy', 'usedAt'])
+        && request.resource.data.role == 'member'
+        && request.resource.data.usedBy == null
+        && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if isAdmin() && resource.data.usedBy == null;
+      // Used up by the person joining, in the same write that creates their profile.
+      allow update: if signedIn()
+        && resource.data.usedBy == null
+        && changed().hasOnly(['usedBy', 'usedAt'])
+        && request.resource.data.usedBy == request.auth.uid
+        && getAfter(userDoc(request.auth.uid)).data.inviteCode == code;
+    }
+
+    // Keeps usernames unique.
+    match /usernames/{name} {
+      allow get: if true;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(userDoc(request.auth.uid)).data.username == name;
+    }
+
+    match /users/{uid} {
+      allow read: if isMember() || (signedIn() && request.auth.uid == uid);
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['username', 'role', 'inviteCode', 'theme', 'favs', 'removed', 'createdAt'])
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('^[a-z0-9_.-]{3,20}$')
+        && request.resource.data.removed == false
+        && request.resource.data.favs == []
+        && exists(inviteDoc(request.resource.data.inviteCode))
+        && get(inviteDoc(request.resource.data.inviteCode)).data.usedBy == null
+        && getAfter(inviteDoc(request.resource.data.inviteCode)).data.usedBy == uid
+        && request.resource.data.role == get(inviteDoc(request.resource.data.inviteCode)).data.role
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid;
+      allow update: if
+        (isMember() && request.auth.uid == uid
+          && changed().hasOnly(['theme', 'favs'])
+          && request.resource.data.theme is string
+          && request.resource.data.favs is list && request.resource.data.favs.size() <= 2000)
+        || (isAdmin() && request.auth.uid != uid && changed().hasOnly(['removed']));
+
+      match /folders/{folderId} {
+        allow read, delete: if isMember() && request.auth.uid == uid;
+        allow create, update: if isMember() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['name', 'clipIds', 'createdAt'])
+          && request.resource.data.name is string && request.resource.data.name.size() <= 40
+          && request.resource.data.clipIds is list && request.resource.data.clipIds.size() <= 1000;
+      }
+
+      // Personal clips: only the owner sees them. The robot creates them.
+      match /clips/{clipId} {
+        allow read: if isMember() && request.auth.uid == uid;
+        allow update: if isMember() && request.auth.uid == uid
+          && changed().hasOnly(['title', 'titleLower', 'tags', 'category', 'deleted', 'views', 'favCount', 'shares', 'updatedAt']);
+      }
+    }
+
+    // Group clips. The robot creates them; members bump counters; the uploader or admin can edit or delete.
+    match /clips/{clipId} {
+      allow read: if isMember();
+      allow update: if isMember() && (
+        ((resource.data.uploaderUid == request.auth.uid || isAdmin())
+          && changed().hasOnly(['title', 'titleLower', 'tags', 'category', 'deleted', 'updatedAt'])
+          && request.resource.data.title is string && request.resource.data.title.size() <= 60
+          && request.resource.data.tags is list && request.resource.data.tags.size() <= 12)
+        || (changed().hasOnly(['views', 'favCount', 'shares', 'updatedAt'])
+          && stepOk('views', 0, 1) && stepOk('shares', 0, 1) && stepOk('favCount', -1, 1))
+      );
+    }
+
+    // Deleted clips waiting for the robot to remove their files.
+    match /trash/{clipId} {
+      allow create: if isMember()
+        && request.resource.data.by == request.auth.uid
+        && ((request.resource.data.scope == 'group'
+              && (get(/databases/$(database)/documents/clips/$(clipId)).data.uploaderUid == request.auth.uid || isAdmin()))
+          || (request.resource.data.scope == 'personal'
+              && request.resource.data.ownerUid == request.auth.uid
+              && exists(/databases/$(database)/documents/users/$(request.auth.uid)/clips/$(clipId))));
+    }
+
+    // Clips waiting for the robot.
+    match /jobs/{jobId} {
+      allow read: if isMember() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isMember()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.type in ['youtube', 'link', 'gallery']
+        && request.resource.data.status == (request.resource.data.type == 'gallery' ? 'uploading' : 'queued')
+        && request.resource.data.visibility in ['group', 'personal']
+        && request.resource.data.title is string && request.resource.data.title.size() <= 60
+        && request.resource.data.ranges is list && request.resource.data.ranges.size() <= 10;
+      allow update: if isMember()
+        && resource.data.ownerUid == request.auth.uid
+        && resource.data.status == 'uploading'
+        && request.resource.data.status == 'queued'
+        && changed().hasOnly(['status', 'updatedAt']);
+      allow delete: if isMember() && resource.data.ownerUid == request.auth.uid
+        && resource.data.status in ['failed', 'done', 'uploading'];
+
+      match /chunks/{chunkId} {
+        allow create: if isMember()
+          && get(/databases/$(database)/documents/jobs/$(jobId)).data.ownerUid == request.auth.uid
+          && get(/databases/$(database)/documents/jobs/$(jobId)).data.status == 'uploading'
+          && request.resource.data.keys().hasOnly(['part', 'i', 'data'])
+          && request.resource.data.data is bytes
+          && request.resource.data.data.size() <= 1000000;
+      }
+    }
+
+    // Password resets and removals for the robot to carry out.
+    match /adminTasks/{taskId} {
+      allow read, create: if isAdmin();
+    }
+
+    match /config/{docId} {
+      allow read: if isMember();
+      allow write: if isAdmin() && docId == 'trigger';
+    }
+  }
+}
