@@ -25,7 +25,9 @@ export function bulkImport({ root, params }) {
       <button class="btn" id="go">${icon('search')}Look them up</button>
     </main>`);
     const ta = $('#links', root);
-    const urls = () => [...new Set((ta.value.match(/https?:\/\/[^\s,]+/g) || []))];
+    // Vlipsy search, home and other non-clip pages are skipped; only clip pages are looked up.
+    const notClip = (u) => /^https?:\/\/(www\.)?vlipsy\.com\//i.test(u) && !/^https?:\/\/(www\.)?vlipsy\.com\/(clips|vlip|vlips)\/[^\/?#]+/i.test(u);
+    const urls = () => [...new Set((ta.value.match(/https?:\/\/[^\s,]+/g) || []).filter((u) => !notClip(u)))];
     const upd = () => { const n = urls().length; $('#count', root).textContent = n > MAX ? `${n} links. The first ${MAX} are looked up now; the rest stay here for the next round.` : `${n} ${n === 1 ? 'link' : 'links'}`; };
     ta.oninput = upd; upd();
     $('#go', root).onclick = async () => {
