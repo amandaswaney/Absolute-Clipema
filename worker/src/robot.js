@@ -16,6 +16,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getSecurityRules } from 'firebase-admin/security-rules';
 import { makeStorage } from './storage.js';
 import * as media from './media.js';
+import { sourceKey } from './sourcekey.js';
 import { lookupPage } from './lookup.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -164,7 +165,7 @@ async function makeClip(job, file, info, storage, title) {
     uploaderUid: job.ownerUid, uploaderName: job.ownerName || 'someone',
     videoUrl, thumbUrl, videoKey, thumbKey, b2Keys: [videoKey, ...(thumbKey ? [thumbKey] : [])],
     duration: Math.round(info.duration * 10) / 10, width: info.width, height: info.height,
-    source: { type: job.type, url: job.url || null },
+    source: { type: job.type, url: job.url || null, page: job.pageUrl || null, key: job.pageUrl ? sourceKey(job.url) : null },
     views: 0, favCount: 0, shares: 0, deleted: false, bytes,
     createdAt: now(), updatedAt: now(),
   });
@@ -172,6 +173,15 @@ async function makeClip(job, file, info, storage, title) {
 }
 
 async function processLinkJob(job, work, storage) {
+  // Bulk imports: if the same video is already in the app, point to it instead of making a copy.
+  if (job.pageUrl) {
+    const key = sourceKey(job.url);
+    for (const coll of ['clips', `users/${job.ownerUid}/clips`]) {
+      const q = await db.collection(coll).where('source.key', '==', key).limit(5).get();
+      const hit = q.docs.find((d) => !d.data().deleted);
+      if (hit) { log('Already in the app, skipping:', key); return [hit.id]; }
+    }
+  }
   const cookies = cookiesFile();
   const groups = outputsOf(job);
   const ids = [];

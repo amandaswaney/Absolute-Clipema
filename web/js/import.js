@@ -3,6 +3,7 @@ import * as db from './db.js';
 import { html, icon, $, $$, toast, backBtn } from './ui.js';
 import { CATEGORIES } from './themes.js';
 import { makeTabs } from './create.js';
+import { sourceKey } from './sourcekey.js';
 
 const KEY = 'clipema-import-job';
 const MAX = 20;
@@ -63,19 +64,29 @@ export function bulkImport({ root, params }) {
   }
 
   function review(id, job) {
-    const items = (job.items || []).map((it) => ({ ...it, on: !!it.videoUrl && !it.error }));
+    // Spot clips that are already in the app (or twice in this list) and untick them.
+    const have = new Map();
+    [...db.state.clips.values()].forEach((c) => { if (c.source && c.source.url && !c.deleted) have.set(sourceKey(c.source.url), c.title); });
+    const items = (job.items || []).map((it) => {
+      const k = it.videoUrl ? sourceKey(it.videoUrl) : null;
+      const dup = k && have.has(k) ? `Already in the app as “${have.get(k)}”.` : null;
+      if (k && !have.has(k)) have.set(k, it.title || 'another link in this list');
+      return { ...it, dup, on: !!it.videoUrl && !it.error && !dup };
+    });
+    const dups = items.filter((i) => i.dup).length;
     let category = 'Reactions', visibility = 'group';
     const draw = () => {
       const n = items.filter((i) => i.on).length;
       root.innerHTML = String(html`<main class="screen">
         <div class="top-row">${backBtn('#/create')}<h1 class="grow" style="font-size:28px">Check and import</h1></div>
-        <p class="muted" style="margin:0">Fix any names or tags, and untick anything you don't want.</p>
+        <p class="muted" style="margin:0">Fix any names or tags, and untick anything you don't want.${dups ? ` ${dups} ${dups === 1 ? 'clip is' : 'clips are'} already in the app, so ${dups === 1 ? 'it is' : 'they are'} unticked.` : ''}</p>
         <ul class="list" style="gap:12px">${items.map((it, i) => html`<li class="panel" style="gap:12px;${it.on ? '' : 'opacity:.6'}">
           <label class="top-row" style="gap:12px;cursor:pointer">
             <input type="checkbox" data-on="${i}" ${it.on ? html`checked` : ''} ${it.videoUrl ? '' : html`disabled`} style="width:22px;height:22px;accent-color:var(--neon)">
             ${it.thumbUrl ? html`<img src="${it.thumbUrl}" alt="" width="64" height="40" style="width:64px;height:40px;object-fit:cover;border-radius:8px;background:var(--raised)" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
             <span class="grow small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.url}</span>
           </label>
+          ${it.dup ? html`<p class="small" style="margin:0;color:var(--neon)">${it.dup}</p>` : ''}
           ${it.videoUrl ? html`
             <div class="field"><label for="t${i}">Name</label><input class="input" id="t${i}" data-title="${i}" maxlength="60" value="${it.title}"></div>
             <div class="field"><label for="g${i}">Tags</label><input class="input" id="g${i}" data-tags="${i}" value="${(it.tags || []).join(', ')}" autocapitalize="none"></div>`
